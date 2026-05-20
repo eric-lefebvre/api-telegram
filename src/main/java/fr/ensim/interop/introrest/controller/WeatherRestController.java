@@ -7,8 +7,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,27 +33,35 @@ public class WeatherRestController {
 			@RequestParam("city") String city,
 			@RequestParam(value = "forecast", required = false, defaultValue = "false") boolean forecast) {
 
-		WeatherResponse response = restTemplate.getForObject(
-				buildUrl("/weather", city), WeatherResponse.class);
+		WeatherResponse response;
+		try {
+			response = restTemplate.getForObject(buildUrl("/weather", city), WeatherResponse.class);
+		} catch (HttpClientErrorException e) {
+			throw new ResponseStatusException(e.getStatusCode(), "Ville introuvable : " + city);
+		}
 
 		if (forecast && response != null) {
-			ForecastResponse forecastResponse = restTemplate.getForObject(
-					buildUrl("/forecast", city), ForecastResponse.class);
-
-			if (forecastResponse != null && forecastResponse.getList() != null) {
-				response.setForecast(filterNextTwoDays(forecastResponse.getList()));
+			try {
+				ForecastResponse forecastResponse = restTemplate.getForObject(buildUrl("/forecast", city), ForecastResponse.class);
+				if (forecastResponse != null && forecastResponse.getList() != null) {
+					response.setForecast(filterNextTwoDays(forecastResponse.getList()));
+				}
+			} catch (HttpClientErrorException e) {
+				throw new ResponseStatusException(e.getStatusCode(), "Erreur lors de la récupération des prévisions : " + city);
 			}
 		}
 
 		return response;
 	}
 
-	private String buildUrl(String endpoint, String city) {
-		return weatherApiUrl + endpoint
-				+ "?q=" + city
-				+ "&appid=" + weatherApiToken
-				+ "&units=metric"
-				+ "&lang=fr";
+	private URI buildUrl(String endpoint, String city) {
+		return UriComponentsBuilder.fromHttpUrl(weatherApiUrl + endpoint)
+				.queryParam("q", city)
+				.queryParam("appid", weatherApiToken)
+				.queryParam("units", "metric")
+				.queryParam("lang", "fr")
+				.build()
+				.toUri();
 	}
 
 	/**

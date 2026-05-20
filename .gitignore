@@ -15,6 +15,9 @@ target/
 .project
 .settings/
 
+# Local config (clés API)
+application-local.properties
+
 # Logs
 *.log
 
